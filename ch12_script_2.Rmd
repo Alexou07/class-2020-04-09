@@ -25,9 +25,22 @@ Today's class will be based on [Chapter 12: "Multiple Regression"](https://david
 
 First, re-estimate that model. Call it `model_1`.
 
+```{r}
+model_1 <- lm(earnings ~ sat + faculty, data = x) 
+```
+
 Second, look at the regression coefficients.
+```{r}
+estimates <- model_1 %>%
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
+```
 
 Third, consider a school with average faculty salary of $50,000 and average SAT of 1200. What would the school's median earnings be 10 years from now? Use the simple approach of taking the regression estimates and then plugging in 50 and 1200 into the formula which the regression model represents.
+
+```{r}
+predict(model_1, newdata = tibble(faculty = 50, sat = 1200))
+```
 
 Fourth (and optional! not covered in the book!), check out the `predict()` function. This allows you to avoid typing out the formula yourself.
 
@@ -39,12 +52,21 @@ Fourth (and optional! not covered in the book!), check out the `predict()` funct
 
 First, use the `augment()` function to calculate the fitted values and residuals. You might want to look at some of the arguments that the `augment()` function allows for.
 
+```{r}
+model_1 %>%
+  augment(newdata = x, ID = "name") %>%
+  mutate(.resid = earnings - .fitted) %>%
+  slice(which.min(.resid), which.max(.resid))
+
+```
+
 Second, define what the residual is. 
 
 Third, determine the school with the largest positive residual and the school with the largest negative residual.
 
 Fourth, speculate about what causes these residuals. What is the model missing? How might we improve the model?
 
+Include either Tier or tier name for public institutions.
 
 ### Scene 9
 
@@ -52,18 +74,48 @@ Fourth, speculate about what causes these residuals. What is the model missing? 
 
 First, estimate a new model in which `earnings` are explained by `public` and by `price`. There is no interaction term. Interpret the regression coefficients.
 
+```{r}
+x %>%
+  lm(earnings ~ public + price, data = .) %>%
+  tidy(conf.int = TRUE)
+```
+For each increase in the price of a school the estimated earnings increase by $1,394.
+
 Second, estimate another model, `model_2`, in which `earnings` are explained by `public`, `price` and the **interaction** between `public` and `price`. Interpret the regression coefficients.
+
+```{r}
+model_2 <- lm(earnings ~ public*price, data = x)
+
+model_2 %>%
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
+```
 
 Third, use `tidy()` to find the confidence intervals for the regression coefficients for `model_2`.
 
 Fourth, interpret the confidence interval for coefficient on `public` using one sentence for the Bayesian interpretation and one sentence for the Frequentist interpretation.
 
+We are 95% confident that the true average increase in projected student earnings for those attending a public school lies in the interval calculated.
 
+95% of the time that you perform this exercise, the intervals constructed will contain the true but unknown population parameter
 
 ### Scene 10
 
 **Prompt:** In the previous scene, we generated the confidence intervals using `tidy(conf.int = TRUE)`. Let's check those confidence intervals by doing our own bootstrapping. Set `reps = 100` to save processing time. Hints: `unnest()`, `group_by()`, and `summarize()` are useful here, especially `unnest()` which you may not have seen before.
 
+```{r}
+x %>%
+  rep_sample_n(size = nrow(.), replace = TRUE, reps = 100) %>%
+  group_by(replicate) %>%
+  nest() %>%
+  mutate(mod = map(data, ~lm(earnings ~ public * price, data =.)),
+         tidied = map(mod, ~tidy(.))) %>%
+  unnest(tidied) %>%
+  group_by(term) %>%
+  mutate(conf.low = quantile(estimate, 0.025),
+         conf.high = quantile(estimate, 0.975))
+  
+```
 In other words, you are not using `tidy(conf.int = TRUE)`. You are just using `tidy()`. That gives you the tibble of the regression estimates. Then, you can use `unnest()` to "explode" out a row for each estimate. Then, `group_by(term)` and the usual quantile trick for each parameter should give you what you want.
 
 
@@ -71,6 +123,10 @@ In other words, you are not using `tidy(conf.int = TRUE)`. You are just using `t
 
 **Prompt:** Now that we have our regression model using one numerical and one categorical explanatory variables, let's visualize the interaction model using `ggplot2`. Set the colors to represent public vs. private xs. Hint: Be sure to make the `public` variable into a factor first. 
 
+```{r}
+model_2 %>%
+  ggplot(aes(price, earnings, color = as.factor(public))) + geom_point()
+```
 ### Scene 12
 
 **Prompt:** Now let's use the regression model results to make predictions. What would be the predicted value of median earnings for a private university with a sticker price of $20,000? Plot this as an intersection of a vertical line and the relevant line of best fit on the graph of the interaction model you made in the previous scene.
